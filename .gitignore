@@ -1,0 +1,5 @@
+/.build-waf-*
+/.local_vimrc.vim
+/.lock-waf_linux2_build
+/.syntastic_c_config
+/.syntastic_cpp_config
