@@ -1,0 +1,2 @@
+ctx.program(target='day2', source='day2.c',
+            use=['libcommon'])
