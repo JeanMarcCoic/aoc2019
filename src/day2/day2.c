@@ -87,6 +87,7 @@ int main(int argc, char **argv)
 
   end:
     qv_wipe(&program);
+    lstr_wipe(&input);
 
     return 0;
 }

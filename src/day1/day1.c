@@ -46,5 +46,7 @@ int main(int argc, char **argv)
     e_info("part1: %d", sum_fuel);
     e_info("part2: %d", sum_fuel_part2);
 
+    lstr_wipe(&input);
+
     return 0;
 }
