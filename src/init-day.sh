@@ -22,5 +22,3 @@ cat > $DIR/wscript_build <<XXX
 ctx.program(target='day$DAY', source='day$DAY.c',
             use=['libcommon'])
 XXX
-
-echo "ctx.recurse('day$DAY')" >> wscript_build

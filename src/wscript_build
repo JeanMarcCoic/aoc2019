@@ -1,2 +1,3 @@
-ctx.recurse('day1')
-ctx.recurse('day2')
+for d in ctx.path.ant_glob('day*', dir=True, maxdepth=1):
+    if d.make_node('wscript_build').exists():
+        ctx.recurse(d.name)
