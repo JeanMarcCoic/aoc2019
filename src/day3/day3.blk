@@ -23,10 +23,8 @@ static int ps_read_step(pstream_t *ps, char *dir, int *length)
     return 0;
 }
 
-typedef void (*step_f)(coords_t *cursor, char dir, void *ctx);
-
 static void execute_step(coords_t *cursor, char dir, int length,
-                         step_f cb, void *ctx)
+                         void (^cb)(coords_t *current))
 {
     int increment = 1;
 
@@ -37,7 +35,7 @@ static void execute_step(coords_t *cursor, char dir, int length,
       case 'R':
         for (int steps = 0; steps < length; steps++) {
             cursor->x += increment;
-            cb(cursor, dir, ctx);
+            cb(cursor);
         }
         break;
 
@@ -47,7 +45,7 @@ static void execute_step(coords_t *cursor, char dir, int length,
       case 'U':
         for (int steps = 0; steps < length; steps++) {
             cursor->y += increment;
-            cb(cursor, dir, ctx);
+            cb(cursor);
         }
         break;
     }
@@ -59,24 +57,6 @@ typedef struct read_bounds_ctx_t {
 } read_bounds_ctx_t;
 
 GENERIC_FUNCTIONS(read_bounds_ctx_t, read_bounds_ctx);
-
-static void read_bounds(coords_t *cursor, char dir, void *_ctx)
-{
-    read_bounds_ctx_t *ctx = _ctx;
-
-    if (ctx->sw_corner.x > cursor->x) {
-        ctx->sw_corner.x = cursor->x;
-    }
-    if (ctx->sw_corner.y > cursor->y) {
-        ctx->sw_corner.y = cursor->y;
-    }
-    if (ctx->ne_corner.x < cursor->x) {
-        ctx->ne_corner.x = cursor->x;
-    }
-    if (ctx->ne_corner.y < cursor->y) {
-        ctx->ne_corner.y = cursor->y;
-    }
-}
 
 typedef struct cell_t {
     char c;
@@ -116,56 +96,6 @@ static inline cell_t *map_ref(map_t *map, int x, int y) {
     return map->map + x + map->x0 + (y + map->y0) * map->size_x;
 }
 
-static void detect_cross(coords_t *cursor, char dir, void *_ctx)
-{
-    map_t *map = _ctx;
-    cell_t *c = map_ref(map, cursor->x, cursor->y);
-
-    if (c->c != '\0' && c->c < map->wire_number + '0') {
-        // cross detected
-        int dist = abs(cursor->x) + abs(cursor->y);
-
-        if (map->part1 > dist) {
-            map->part1 = dist;
-        }
-
-        c->c = 'X';
-    } else {
-        c->c = map->wire_number + '0';
-    }
-}
-
-static void detect_cross_part2_wire1(coords_t *cursor, char dir, void *_ctx)
-{
-    map_t *map = _ctx;
-    cell_t *c = map_ref(map, cursor->x, cursor->y);
-
-    map->step_counter++;
-
-    c->c = map->wire_number + '0';
-    if (c->wire1_steps < map->step_counter) {
-        c->wire1_steps = map->step_counter;
-    }
-}
-
-static void detect_cross_part2_wire2(coords_t *cursor, char dir, void *_ctx)
-{
-    map_t *map = _ctx;
-    cell_t *c = map_ref(map, cursor->x, cursor->y);
-
-    map->step_counter++;
-
-    if (c->c != '\0' && c->c < map->wire_number + '0') {
-        int cost = map->step_counter + c->wire1_steps;
-
-        if (map->part2 > cost) {
-            map->part2 = cost;
-        }
-        c->c = 'X';
-    } else {
-        c->c = map->wire_number + '0';
-    }
-}
 
 int main(int argc, char **argv)
 {
@@ -177,6 +107,9 @@ int main(int argc, char **argv)
     bool help = false;
     const char *arg0 = NEXTARG(argc, argv);
     const char *input_file;
+
+    map_t *map_p = &map;
+    read_bounds_ctx_t *bounds_p = &bounds;
 
     popt_t options[] = {
         OPT_FLAG('h', "help", &help, "show help"),
@@ -220,7 +153,20 @@ int main(int argc, char **argv)
                 e_fatal("failed to read step");
             }
 
-            execute_step(&cursor, dir, length, read_bounds, &bounds);
+            execute_step(&cursor, dir, length, ^(coords_t *current) {
+               if (bounds_p->sw_corner.x > current->x) {
+                   bounds_p->sw_corner.x = current->x;
+               }
+               if (bounds_p->sw_corner.y > current->y) {
+                   bounds_p->sw_corner.y = current->y;
+               }
+               if (bounds_p->ne_corner.x < current->x) {
+                   bounds_p->ne_corner.x = current->x;
+               }
+               if (bounds_p->ne_corner.y < current->y) {
+                   bounds_p->ne_corner.y = current->y;
+               }
+            });
         }
     }
 
@@ -259,7 +205,22 @@ int main(int argc, char **argv)
                 e_fatal("failed to read step");
             }
 
-            execute_step(&cursor, dir, length, detect_cross, &map);
+            execute_step(&cursor, dir, length, ^(coords_t *current) {
+                cell_t *c = map_ref(map_p, current->x, current->y);
+
+                if (c->c != '\0' && c->c < map_p->wire_number + '0') {
+                    // cross detected
+                    int dist = abs(current->x) + abs(current->y);
+
+                    if (map_p->part1 > dist) {
+                        map_p->part1 = dist;
+                    }
+
+                    c->c = 'X';
+                } else {
+                    c->c = map_p->wire_number + '0';
+                }
+            });
         }
     }
 
@@ -309,11 +270,35 @@ int main(int argc, char **argv)
 
             switch (map.wire_number) {
               case 1:
-                execute_step(&cursor, dir, length, detect_cross_part2_wire1, &map);
+                execute_step(&cursor, dir, length, ^(coords_t *current) {
+                    cell_t *c = map_ref(map_p, current->x, current->y);
+
+                    map_p->step_counter++;
+
+                    c->c = map.wire_number + '0';
+                    if (c->wire1_steps < map.step_counter) {
+                        c->wire1_steps = map.step_counter;
+                    }
+                });
                 break;
 
               case 2:
-                execute_step(&cursor, dir, length, detect_cross_part2_wire2, &map);
+                execute_step(&cursor, dir, length, ^(coords_t *current) {
+                    cell_t *c = map_ref(map_p, current->x, current->y);
+
+                    map_p->step_counter++;
+
+                    if (c->c != '\0' && c->c < map.wire_number + '0') {
+                        int cost = map.step_counter + c->wire1_steps;
+
+                        if (map_p->part2 > cost) {
+                            map_p->part2 = cost;
+                        }
+                        c->c = 'X';
+                    } else {
+                        c->c = map.wire_number + '0';
+                    }
+                });
                 break;
             }
         }

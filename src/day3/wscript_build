@@ -1,2 +1,3 @@
-ctx.program(target='day3', source='day3.c',
-            use=['libcommon'])
+ctx.program(target='day3', source='day3.blk',
+            use=['libcommon'],
+            features="c cprogram")
